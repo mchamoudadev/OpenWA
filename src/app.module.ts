@@ -35,6 +35,7 @@ import { PluginsApiModule } from './modules/plugins/plugins.module';
 import { AgentToolsModule } from './core/agent-tools/agent-tools.module';
 import { IntegrationModule } from './modules/integration/integration.module';
 import { SearchModule } from './modules/search/search.module';
+import { CaawiyeModule } from './modules/caawiye/caawiye.module';
 
 // Only import QueueModule if explicitly enabled to avoid Redis connection errors
 const queueModules: Array<Type | DynamicModule> = [];
@@ -268,6 +269,7 @@ if (dashboardServingEnabled && dashboardBuildPresent) {
     ...searchModules, // Global message search (opt-out via SEARCH_ENABLED=false; default ON)
     ...mcpModules, // MCP Streamable-HTTP server (opt-in via MCP_ENABLED=true)
     ...serveStaticModules, // Bundled dashboard SPA (production single-port setup)
+    CaawiyeModule, // P3-T1: Caawiye platform integration (inbound HMAC, session vault, health)
   ],
 })
 export class AppModule {}
