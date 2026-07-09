@@ -77,6 +77,26 @@ export default () => ({
     },
   },
 
+  // Caawiye platform integration (P3-T1). Thin, opt-in bridge to the Caawiye
+  // AI platform. Inbound: forward WA messages to the platform webhook (HMAC).
+  // Outbound reuses the standard send API. Session-at-rest encryption + a
+  // canary/health concept for the whatsapp-web.js-breaks-periodically risk.
+  caawiye: {
+    // Master switch for the inbound forwarder. Off by default so the fork's
+    // stock behaviour is unchanged unless a Caawiye deploy opts in.
+    enabled: process.env.CAAWIYE_ENABLED === 'true',
+    // Platform webhook that receives inbound messages (HMAC-signed).
+    webhookUrl: process.env.CAAWIYE_WEBHOOK_URL,
+    // Shared HMAC secret (same value as the platform's WA_WEBHOOK_SECRET).
+    webhookSecret: process.env.WA_WEBHOOK_SECRET,
+    webhookTimeoutMs: parseInt(process.env.CAAWIYE_WEBHOOK_TIMEOUT_MS || '10000', 10),
+    // AES-256-GCM key for session-at-rest encryption (hex or passphrase). When
+    // absent, the session vault is inert and LocalAuth behaves as stock.
+    sessionKey: process.env.WA_SESSION_KEY,
+    // Optional canary session name to watch for early breakage warning (P3-T4).
+    canarySession: process.env.CAAWIYE_CANARY_SESSION,
+  },
+
   // Storage configuration
   storage: {
     type: process.env.STORAGE_TYPE || 'local',
