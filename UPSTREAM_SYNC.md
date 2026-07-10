@@ -26,7 +26,12 @@ Pin whatsapp-web.js to 1.34.7 (P3-T1 version pinning)
 Allow underscores and 100-char session names
 Add Caawiye platform integration module (P3-T1)   ← the inbound HMAC forwarder
 Document Caawiye integration env vars in .env.example (P3-T1)
+allow underscore in isSafeSessionName to match CreateSessionDto (caw_<t>_<c> names)  ← added 2026-07-11
 ```
+> **Follow-up to reduce divergence:** the underscore patches (this one + the DTO one) exist only because
+> our session names use `_`. Cleaner long-term: change the platform's `formatWaSessionName`
+> (`dugsiiye-desk/packages/channels/src/wa-qr/routing.ts`) to use **hyphens** (`caw-<t>-<c>`), which is
+> upstream's native safe charset — then DROP both underscore commits. Costs a one-time re-provision (re-scan).
 All Caawiye code lives under `src/modules/caawiye/**` (new files, additive). The only shared
 files these commits touch are: `src/app.module.ts` (registers `CaawiyeModule`),
 `src/config/configuration.ts` (the `caawiye` config block), `src/modules/session/dto/create-session.dto.ts`
