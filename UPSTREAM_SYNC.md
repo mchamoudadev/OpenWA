@@ -13,8 +13,10 @@ commits behind again and re-hit bugs the maintainers already fixed.
 | **Upstream repo** | https://github.com/rmyndharis/OpenWA.git (remote `upstream`) |
 | **Our fork** | https://github.com/mchamoudadev/OpenWA.git (remote `origin`) |
 | **Working branch** | `caawiye-integration` |
-| **Last synced to** | **tag `v0.8.14`** (commit `3229061`, released 2026-07-10) |
+| **Tracking** | **`upstream/main`** (the development line — NOT tagged releases, per owner's choice) |
+| **Last synced to** | `upstream/main` @ `35ca31f` (= tag `v0.8.14` + 3 commits: plugin worker fail-fast #683, plugin-search docs #682, Korean i18n polish) |
 | **Synced on** | 2026-07-11 |
+| **⚠ Tracking-main tradeoff** | You now pull upstream's newest commits, which are **not always in a tagged release** — i.e. less battle-tested than a `vX.Y.Z` tag. Upside: every fix the moment it lands. Downside: a future sync may pull an unreleased regression. If a sync ever breaks, fall back to the newest tag (`git tag \| sort -V \| tail -1`) instead of `main`, or roll back to the backup branch. |
 | **whatsapp-web.js** | 1.34.7 (pinned) |
 | **Backup of pre-sync state** | branch `caawiye-integration-backup` @ `fcfd639` |
 
@@ -77,6 +79,47 @@ gateway↔platform webhook contract — do it as a coordinated change **on both 
 forwarder + `packages/channels/src/wa-qr/webhook.ts` + `routing.ts`) once the platform webhook
 schema is confirmed to accept the extra fields. The gateway-side LID self-heal makes this
 optional for now.
+
+---
+
+## Production landmines upstream ALREADY defused (you're now protected — watch these categories)
+
+These are errors the maintainers hit and fixed that we would realistically face running real tenants.
+We now HAVE all of them (on `main`). Listed so you know what's protecting you — and which
+categories to watch for NEW fixes in on future syncs.
+
+**Session survival & Chrome under load (the #1 QR-tier pain at scale):**
+- Auto-start authenticated sessions after a gateway/container restart (no re-scan every reboot). [#218]
+- No reconnect attempts fired during shutdown/drain; "reconnection failed after 0 attempts" fixed.
+- A terminally-failed session no longer strands its Chrome or wedges at "already running."
+- Docker Compose no longer kills Chromium mid-spawn under multi-session whatsapp-web.js load.
+- Chrome-for-Testing instead of the Debian package (fixes SIGTRAP launch crashes in strict/K8s envs). [#0.8.12]
+- Session delete purges its on-disk engine auth directory (no leftover locked dirs).
+
+**Delivery reliability (silent customer-message loss):**
+- Inbound ingress deliveries retry with backoff instead of failing on the first error.
+- The `message:sending` moderation gate and `message:failed` notification now cover every outbound path.
+- A reaction no longer clobbers a message's delivery status.
+- Sibling webhooks on the same event get distinct idempotency keys (no cross-cancellation).
+- Prometheus counter for terminally-failed webhook deliveries (`/api/metrics`) — observability.
+
+**Data growth / DB at scale (disk-fill + slowdown outages):**
+- `ingress_events` + `integration_delivery_failures` pruned past `INGRESS_RETENTION_DAYS` (default 90) —
+  tables no longer grow unbounded until the disk fills.
+- `DATABASE_SYNCHRONIZE=true` on Postgres rejected at boot (it was dropping the search column every boot).
+- `DATABASE_STATEMENT_TIMEOUT_MS` / `IDLE_TIMEOUT_MS` / connection tuning; indexed `webhooks.sessionId`.
+
+**Security (what a pentest / incident would exploit):**
+- SSRF guard on all webhook + media-by-URL fetches (internal IPs, cloud metadata, IPv6 gaps, DNS-rebinding).
+- API keys scoped to specific sessions; ADMIN role on audit/stats/plugins; failed-auth attempts audited.
+- Secret files `0600`; secrets redacted in logs; dev API key refused in prod; Swagger off in prod.
+- Oversized-payload bounds, decompression-bomb caps, path-traversal blocked on session names.
+
+**Media:** channel/`@newsletter` media send fails clean (501) instead of crashing on the removed `avParams`;
+`base64` takes precedence over a stale `url`.
+
+> When you sync in future, skim `CHANGELOG.md` for NEW entries in these same categories —
+> those are the ones that protect a production WhatsApp gateway.
 
 ---
 
