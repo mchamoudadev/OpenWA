@@ -77,9 +77,19 @@ export class CaawiyePlatformService implements OnModuleInit {
     const secret = this.config.get<string>('caawiye.webhookSecret')!;
     const timeoutMs = this.config.get<number>('caawiye.webhookTimeoutMs', 10000);
 
+    // The canonical WhatsApp address this message came from, in the neutral
+    // dialect the engine emits: `<phone>@c.us` for a phone user, `<lid>@lid` for
+    // a privacy id. Groups are already filtered out above, so `from` is the
+    // customer. We forward it VERBATIM so the platform replies to the exact JID
+    // (a LID stays a LID and is never rebuilt as a phone `@c.us`).
+    const waAddress = msg.from;
     const body = JSON.stringify({
       channelName,
-      externalUserId: toExternalUserId(msg.from),
+      // Full address to reply to verbatim (drives conversation keying on the platform).
+      waAddress,
+      // Back-compat for older platform builds that only read `externalUserId`.
+      // Kept EQUAL to the full address so both fields agree (platform prefers `waAddress`).
+      externalUserId: toExternalUserId(waAddress),
       externalMessageId: msg.id,
       content: msg.body ?? '',
       // whatsapp-web.js timestamps are epoch SECONDS; the platform expects ms.

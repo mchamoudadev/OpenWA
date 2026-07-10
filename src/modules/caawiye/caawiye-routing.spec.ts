@@ -14,9 +14,12 @@ describe('caawiye-routing', () => {
     expect(isCaawiyeSessionName(undefined)).toBe(false);
   });
 
-  it('strips the WhatsApp chat suffix to the bare MSISDN', () => {
-    expect(toExternalUserId('252611234567@c.us')).toBe('252611234567');
+  it('preserves the FULL WhatsApp address (never strips the domain suffix)', () => {
+    // A phone user keeps @c.us; a privacy id keeps @lid (so it is never
+    // mislabeled as a phone on reply); a group keeps @g.us; bare passes through.
+    expect(toExternalUserId('252611234567@c.us')).toBe('252611234567@c.us');
+    expect(toExternalUserId('170725637943366@lid')).toBe('170725637943366@lid');
     expect(toExternalUserId('252611234567')).toBe('252611234567');
-    expect(toExternalUserId('120363@g.us')).toBe('120363');
+    expect(toExternalUserId('120363@g.us')).toBe('120363@g.us');
   });
 });

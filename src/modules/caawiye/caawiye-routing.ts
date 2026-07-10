@@ -25,11 +25,13 @@ export function isCaawiyeSessionName(name: string | null | undefined): boolean {
 }
 
 /**
- * Strip a whatsapp-web.js chat id to the bare MSISDN the platform stores as
- * `externalUserId` (`2526...@c.us` -> `2526...`). Non-suffixed input passes
- * through unchanged.
+ * Return the FULL canonical WhatsApp address the platform stores as
+ * `externalUserId` and must reply to VERBATIM. The domain suffix is PRESERVED so
+ * a privacy id (`<lid>@lid`) is never mislabeled as a phone (`<phone>@c.us`):
+ * `2526...@c.us` and `170725...@lid` both pass through unchanged, as does a bare
+ * value with no suffix. Kept byte-compatible with the platform copy in
+ * `@caawiye/channels` `wa-qr/routing.ts` — what we store == what we reply to.
  */
 export function toExternalUserId(waChatId: string): string {
-  const at = waChatId.indexOf('@');
-  return at === -1 ? waChatId : waChatId.slice(0, at);
+  return waChatId;
 }

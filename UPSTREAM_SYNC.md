@@ -27,6 +27,7 @@ Allow underscores and 100-char session names
 Add Caawiye platform integration module (P3-T1)   ← the inbound HMAC forwarder
 Document Caawiye integration env vars in .env.example (P3-T1)
 allow underscore in isSafeSessionName to match CreateSessionDto (caw_<t>_<c> names)  ← added 2026-07-11
+Forward full canonical WhatsApp address (@lid/@c.us) in Caawiye webhook body  ← added 2026-07-11 (last-mile LID reply fix)
 ```
 > **Follow-up to reduce divergence:** the underscore patches (this one + the DTO one) exist only because
 > our session names use `_`. Cleaner long-term: change the platform's `formatWaSessionName`
@@ -75,15 +76,17 @@ LID send resolution now lives in `src/engine/adapters/whatsapp-web-js.adapter.ts
 Take these only if we later ship the plugin worker path or need the docs; otherwise wait for the
 next tagged release.
 
-### Deferred integration enhancement (not a bug, needs coordination)
-v0.8.14's inbound `IncomingMessage` now exposes the full neutral WhatsApp address
-(`from`/`chatId` as `<phone>@c.us` or `<lid>@lid`, plus `isLidSender` / `senderPhone`). Forwarding
-that full address in the HMAC webhook body would let the **platform** target the exact reply JID
-instead of reconstructing `@c.us`. It compiles cleanly but was NOT shipped because it crosses the
-gateway↔platform webhook contract — do it as a coordinated change **on both sides** (gateway
-forwarder + `packages/channels/src/wa-qr/webhook.ts` + `routing.ts`) once the platform webhook
-schema is confirmed to accept the extra fields. The gateway-side LID self-heal makes this
-optional for now.
+### Full-address forwarding (SHIPPED 2026-07-11 — coordinated gateway+platform change)
+v0.8.14's inbound `IncomingMessage` exposes the full neutral WhatsApp address (`from`/`chatId` as
+`<phone>@c.us` or `<lid>@lid`, plus `isLidSender` / `senderPhone`). The Caawiye forwarder now sends
+that full `from` address VERBATIM in the HMAC webhook body as a new `waAddress` field (and keeps
+`externalUserId` equal to it for back-compat), so the **platform** keys the conversation on and
+replies to the exact JID instead of reconstructing `@c.us`. This fixes the last-mile LID bug where a
+`<lid>@lid` sender got its domain stripped, stored bare, then rebuilt as `<lid>@c.us` on reply →
+gateway send failed `No LID for user`. Matching platform change: `@caawiye/channels`
+`wa-qr/webhook.ts` (accepts `waAddress`, falls back to `externalUserId`) + `wa-qr/routing.ts`
+(`toExternalUserId` preserves the domain; `toWhatsAppChatId` returns an `@`-suffixed value verbatim).
+The signed HMAC body is unchanged in scheme — the new field is simply inside the signed payload.
 
 ---
 
