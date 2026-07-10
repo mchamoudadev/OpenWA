@@ -123,6 +123,62 @@ categories to watch for NEW fixes in on future syncs.
 
 ---
 
+## 🚀 PRODUCTION ENV CHECKLIST (set these BEFORE real customers)
+
+Most upstream security/retention fixes ship in the CODE but need env config to fully activate.
+Local dev defaults are fine; production is not. Go through this before exposing the gateway.
+All of these go in the GATEWAY's `.env` (`/openwa-gateway/.env`) unless noted.
+
+### 🔴 Auth & secrets (do NOT skip — local currently uses the well-known dev key)
+- [ ] `NODE_ENV=production` — flips prod-safe defaults on.
+- [ ] `API_MASTER_KEY=<openssl rand -hex 32>` — the gateway's admin API key. **Local currently runs the
+      well-known `dev-admin-key`** (platform sends `WA_GATEWAY_API_KEY=dev-admin-key`). In prod set a strong
+      `API_MASTER_KEY` here AND set the platform's `WA_GATEWAY_API_KEY` to the SAME value.
+- [ ] Do **NOT** set `ALLOW_DEV_API_KEY=true` in prod (it re-enables `dev-admin-key`). Upstream refuses the
+      dev key in prod anyway, but don't fight it.
+- [ ] `WA_WEBHOOK_SECRET=<openssl rand -hex 32>` — the inbound HMAC secret. Must be a strong value and
+      **identical** on the gateway `.env` and the platform (`dugsiiye-desk/.env`). Regenerate from the local dev value.
+- [ ] `WA_SESSION_KEY=<openssl rand -hex 32>` — **session-at-rest encryption (AES-256-GCM).** Currently UNSET,
+      so WhatsApp auth creds sit in plaintext on disk. Set it in prod so a stolen disk/backup can't hijack sessions.
+
+### 🔒 Exposure / attack surface
+- [ ] `ENABLE_SWAGGER=false` — hide the API schema on a public deployment.
+- [ ] `WEBHOOK_SSRF_PROTECT=true` — keep on (default). Blocks webhooks from hitting internal IPs/metadata.
+- [ ] `CORS_ORIGINS=https://your-dashboard-domain` — lock the dashboard/API to your origin(s), not `*`.
+- [ ] `MCP_ENABLED=false` unless you actually use the MCP agent interface (removes a whole surface). If on,
+      keep `MCP_READONLY=true` for observers and the `MCP_IP_RATE_LIMIT_*` defaults.
+
+### 🗄️ Database (you're on Postgres)
+- [ ] `DATABASE_TYPE=postgres` + real `DATABASE_*` creds (or `DATABASE_URL`).
+- [ ] `DATABASE_SYNCHRONIZE=false` and `MAIN_DATABASE_SYNCHRONIZE=false` — **critical**: `true` on Postgres
+      drops the search column every boot and breaks `/search` (upstream now rejects the combo at boot, but set it right).
+- [ ] `DATABASE_SSL=true` + `DATABASE_SSL_REJECT_UNAUTHORIZED=true` for a managed Postgres (Neon/RDS).
+- [ ] `DATABASE_STATEMENT_TIMEOUT_MS` / `DATABASE_IDLE_TIMEOUT_MS` — set sane caps so a slow query can't wedge a connection.
+
+### 🧹 Retention (stops tables filling the disk over weeks)
+- [ ] `AUDIT_RETENTION_DAYS=90` · `WEBHOOK_FAILURE_RETENTION_DAYS=90` · `INGRESS_RETENTION_DAYS=90`
+      (defaults are 90; set explicitly so nobody later assumes "forever"). `0`/negative = keep forever = disk risk.
+
+### 📱 Sessions / Chrome (reliability at scale)
+- [ ] `AUTO_START_SESSIONS=true` — sessions resume after a restart (the fix that stops re-scanning every reboot).
+- [ ] `PUPPETEER_HEADLESS=true`. On Linux/containers verify the Chrome-for-Testing path resolves (upstream's
+      Dockerfile handles amd64; arm64 uses Debian chromium).
+- [ ] `REDIS_ENABLED=true` + real `REDIS_HOST/PORT` (not the builtin) for durable queues across restarts.
+
+### 🔗 Caawiye forwarder (already set locally — update the URL for prod)
+- [ ] `CAAWIYE_ENABLED=true`
+- [ ] `CAAWIYE_WEBHOOK_URL=https://<your-platform-domain>/api/channels/wa/webhook`  (localhost:3000 in dev)
+- [ ] `WA_WEBHOOK_SECRET=` — the same strong secret as above (shared with the platform).
+
+### Platform side (`dugsiiye-desk/.env`) — the matching prod keys
+- [ ] `DATABASE_URL` (managed Postgres + pgvector, e.g. Neon), `OPENROUTER_API_KEY`, R2 storage creds,
+      `WA_GATEWAY_URL` (the gateway's prod URL), `WA_GATEWAY_API_KEY` (= gateway's `API_MASTER_KEY`),
+      `WA_WEBHOOK_SECRET` (= gateway's, shared). Optional: Resend (email), Langfuse (tracing).
+
+> Generate every secret fresh for prod: `openssl rand -hex 32`. Never reuse the dev values.
+
+---
+
 ## How to sync again next time (procedure)
 
 ```bash
