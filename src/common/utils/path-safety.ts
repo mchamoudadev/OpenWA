@@ -40,5 +40,8 @@ export function isSafeStorageKey(key: string): boolean {
  * the auth dir — normal creation validates via the DTO, but data import / seed can carry a raw name.
  */
 export function isSafeSessionName(name: unknown): name is string {
-  return typeof name === 'string' && /^[a-zA-Z0-9-]+$/.test(name);
+  // Underscore added to match the CreateSessionDto charset (Caawiye session names
+  // are `caw_<tenant>_<channel>`). `_` is filesystem-safe (cannot form `..` or a
+  // path separator), so it does not weaken the traversal guard.
+  return typeof name === 'string' && /^[a-zA-Z0-9_-]+$/.test(name);
 }
