@@ -29,6 +29,16 @@ export interface GetMessagesOptions {
 export class MessageService {
   private readonly logger = createLogger('MessageService');
 
+  /**
+   * Per-session outbound chain (anti-ban): consecutive single sends on ONE
+   * session run strictly one-after-another with a jittered gap between them,
+   * so a burst of platform replies (many chats at once) can never fire as a
+   * same-second volley — the signature WhatsApp's automation detection flags.
+   * Keyed by sessionId; each value is the completion of the previous send
+   * INCLUDING its post-send gap.
+   */
+  private readonly sendChains = new Map<string, Promise<void>>();
+
   constructor(
     @InjectRepository(Message, 'data')
     private readonly messageRepository: Repository<Message>,
@@ -52,15 +62,17 @@ export class MessageService {
       type: 'text',
     });
 
-    // Opt-in humanising "typing…" pause before the actual send (anti-automation signal).
-    await this.simulateTypingIfEnabled(engine, finalDto.chatId, finalDto.text);
-
     let result: MessageResult;
     try {
-      // Keep the 2-arg call shape for plain sends; only pass mentions when the caller supplied any.
-      result = finalDto.mentions?.length
-        ? await engine.sendTextMessage(finalDto.chatId, finalDto.text, finalDto.mentions)
-        : await engine.sendTextMessage(finalDto.chatId, finalDto.text);
+      // Serialised + humanised: waits for the previous send on this session
+      // (plus its jittered gap), then seen → read-pause → typing → send.
+      result = await this.queueHumanizedSend(sessionId, async () => {
+        await this.simulateTypingIfEnabled(engine, finalDto.chatId, finalDto.text);
+        // Keep the 2-arg call shape for plain sends; only pass mentions when the caller supplied any.
+        return finalDto.mentions?.length
+          ? await engine.sendTextMessage(finalDto.chatId, finalDto.text, finalDto.mentions)
+          : await engine.sendTextMessage(finalDto.chatId, finalDto.text);
+      });
     } catch (error) {
       // The SEND itself failed — mark FAILED + fire message:failed (a post-send persistence fault is
       // handled separately by persistSentState and must NOT land here).
@@ -638,6 +650,15 @@ export class MessageService {
     const { simulateTyping, simulateTypingMaxMs } = resolveFeatureFlags(this.configService);
     if (!simulateTyping) return;
     try {
+      // A human opens the chat first (blue-tick read receipt), pauses to read,
+      // and only then starts typing. Seen is best-effort on its own — a chat
+      // that can't be marked read must not skip the typing pause.
+      try {
+        await engine.sendSeen(chatId);
+        await new Promise(resolve => setTimeout(resolve, 600 + Math.random() * 1200));
+      } catch {
+        /* seen unsupported/failed — continue to typing */
+      }
       await engine.sendChatState(chatId, 'typing');
       const maxMs = simulateTypingMaxMs;
       const planned = Math.min(maxMs, 500 + text.length * 45);
@@ -646,6 +667,38 @@ export class MessageService {
     } catch (error) {
       this.logger.warn(`simulateTyping skipped: ${error instanceof Error ? error.message : String(error)}`);
     }
+  }
+
+  /**
+   * Chain `task` onto this session's outbound queue. The next queued send may
+   * only START after this one finishes AND a jittered inter-send gap elapses
+   * (`SEND_MIN_GAP_MS`, default 3000; 0 disables). The caller's promise settles
+   * as soon as its own send finishes — the gap only delays the FOLLOWING send.
+   * A failed send never blocks the chain.
+   */
+  private queueHumanizedSend<T>(sessionId: string, task: () => Promise<T>): Promise<T> {
+    const prev = this.sendChains.get(sessionId) ?? Promise.resolve();
+    const result = prev.then(task);
+    const chainLink = result
+      .then(
+        () => undefined,
+        () => undefined,
+      )
+      .then(async () => {
+        const { sendMinGapMs } = resolveFeatureFlags(this.configService);
+        if (sendMinGapMs > 0) {
+          // 0.6x–1.4x so consecutive replies never land on a metronomic beat.
+          const gap = Math.round(sendMinGapMs * (0.6 + Math.random() * 0.8));
+          await new Promise<void>(resolve => {
+            // unref: the detached post-send gap must never hold the process
+            // open (jest teardown, graceful shutdown).
+            const timer = setTimeout(resolve, gap);
+            timer.unref?.();
+          });
+        }
+      });
+    this.sendChains.set(sessionId, chainLink);
+    return result;
   }
 
   /**

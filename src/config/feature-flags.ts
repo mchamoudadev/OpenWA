@@ -17,6 +17,13 @@ export interface FeatureFlags {
   simulateTyping: boolean;
   /** Upper bound (ms) on the humanising typing pause. Default 5000. */
   simulateTypingMaxMs: number;
+  /**
+   * Minimum jittered gap (ms) between CONSECUTIVE single sends on one session
+   * (anti-ban: prevents same-second reply volleys across many chats). The
+   * actual gap is 0.6x–1.4x this value. Default 3000; 0 disables the gap
+   * (sends stay serialised).
+   */
+  sendMinGapMs: number;
 }
 
 /**
@@ -35,6 +42,12 @@ export function computeFeatureFlags(env: NodeJS.ProcessEnv = process.env): Featu
     resolveLidToPhone: env.RESOLVE_LID_TO_PHONE === 'true',
     simulateTyping: env.SIMULATE_TYPING !== 'false',
     simulateTypingMaxMs: Number(env.SIMULATE_TYPING_MAX_MS) || 5000,
+    // Unlike the `|| default` parses above, an EXPLICIT 0 is honoured here (it
+    // means "no inter-send gap"); absent/invalid values fall back to 3000.
+    sendMinGapMs:
+      env.SEND_MIN_GAP_MS !== undefined && Number.isFinite(Number(env.SEND_MIN_GAP_MS))
+        ? Math.max(0, Number(env.SEND_MIN_GAP_MS))
+        : 3000,
   };
 }
 

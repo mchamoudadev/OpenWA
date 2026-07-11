@@ -10,7 +10,16 @@ describe('feature-flags', () => {
         resolveLidToPhone: false, // opt-in
         simulateTyping: true, // opt-out
         simulateTypingMaxMs: 5000,
+        sendMinGapMs: 3000,
       });
+    });
+
+    it('honours an explicit SEND_MIN_GAP_MS of 0 (gap off) but falls back on invalid values', () => {
+      expect(computeFeatureFlags({ SEND_MIN_GAP_MS: '0' }).sendMinGapMs).toBe(0);
+      expect(computeFeatureFlags({ SEND_MIN_GAP_MS: '5000' }).sendMinGapMs).toBe(5000);
+      expect(computeFeatureFlags({ SEND_MIN_GAP_MS: '-100' }).sendMinGapMs).toBe(0);
+      expect(computeFeatureFlags({ SEND_MIN_GAP_MS: 'abc' }).sendMinGapMs).toBe(3000);
+      expect(computeFeatureFlags({}).sendMinGapMs).toBe(3000);
     });
 
     it('treats opt-in flags (autoStart, resolveLid) as ON only for the exact string "true"', () => {
