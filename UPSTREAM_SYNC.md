@@ -28,6 +28,8 @@ Add Caawiye platform integration module (P3-T1)   ← the inbound HMAC forwarder
 Document Caawiye integration env vars in .env.example (P3-T1)
 allow underscore in isSafeSessionName to match CreateSessionDto (caw_<t>_<c> names)  ← added 2026-07-11
 Forward full canonical WhatsApp address (@lid/@c.us) in Caawiye webhook body  ← added 2026-07-11 (last-mile LID reply fix)
+Caawiye forwarder: drop replayed/stale inbound (anti-ban replay guard)  ← added 2026-07-12 (history replay made the bot answer 53 old chats)
+Humanised outbound pacing: seen -> read-pause -> typing, serialised sends  ← added 2026-07-12 (anti-ban; SEND_MIN_GAP_MS)
 ```
 > **Follow-up to reduce divergence:** the underscore patches (this one + the DTO one) exist only because
 > our session names use `_`. Cleaner long-term: change the platform's `formatWaSessionName`
