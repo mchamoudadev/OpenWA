@@ -177,6 +177,13 @@ export default () => ({
     // Shared HMAC secret (same value as the platform's WA_WEBHOOK_SECRET).
     webhookSecret: process.env.WA_WEBHOOK_SECRET,
     webhookTimeoutMs: parseInt(process.env.CAAWIYE_WEBHOOK_TIMEOUT_MS || '10000', 10),
+    // Max age of an inbound message before the forwarder DROPS it. On a fresh
+    // link (and sometimes on reconnect) WhatsApp replays chat history /
+    // unread backlog as `message` events; without this guard every replayed
+    // message reaches the platform and the bot answers ALL of them (real
+    // contacts got bot replies). Replayed messages carry their ORIGINAL
+    // timestamps, so an age cutoff cleanly separates them from live traffic.
+    maxMessageAgeMs: parseInt(process.env.CAAWIYE_MAX_MESSAGE_AGE_MS || '120000', 10),
     // AES-256-GCM key for session-at-rest encryption (hex or passphrase). When
     // absent, the session vault is inert and LocalAuth behaves as stock.
     sessionKey: process.env.WA_SESSION_KEY,

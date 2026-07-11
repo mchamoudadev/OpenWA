@@ -60,6 +60,19 @@ export class CaawiyePlatformService implements OnModuleInit {
       // Skip our own outbound echoes and group traffic (QR tier is 1:1 support).
       if (!msg || msg.fromMe || msg.isGroup) return pass;
 
+      // Replay guard: on a fresh link / reconnect WhatsApp replays history and
+      // unread backlog as `message` events with their ORIGINAL timestamps.
+      // Forwarding those makes the bot answer every old chat (it did — real
+      // contacts received bot replies). Only forward live-ish messages.
+      const maxAgeMs = this.config.get<number>('caawiye.maxMessageAgeMs', 120000);
+      const tsMs = msg.timestamp ? msg.timestamp * 1000 : Date.now();
+      if (Date.now() - tsMs > maxAgeMs) {
+        this.logger.debug(
+          `Skipping replayed/stale message ${msg.id} (age ${Math.round((Date.now() - tsMs) / 1000)}s > ${maxAgeMs / 1000}s)`,
+        );
+        return pass;
+      }
+
       const session = ctx.sessionId
         ? await this.sessionRepository.findOne({ where: { id: ctx.sessionId } })
         : null;
